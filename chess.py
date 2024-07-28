@@ -47,14 +47,19 @@ class ChessPiece:
         
         newMove = self.ChessBoard.board[move[0], move[1]]
         if( newMove != None):
-            self.ChessBoard.board[newMove[0], newMove[1]] = None
+            self.ChessBoard.capture(newMove)
+            self.ChessBoard.board[move[0], move[1]] = None
             
+        self.ChessBoard.moveStack.pushMove(self, (self.xGrid, self.yGrid), move, newMove)
+        
         self.ChessBoard.board[self.xGrid, self.yGrid] = None
         
         self.xGrid = move[0]
         self.yGrid = move[1]
         
         self.ChessBoard.board[move[0], move[1]] = self
+        
+        
         
         return True
     
@@ -251,6 +256,11 @@ class Pawn(ChessPiece):
             #Move forward
             if self.ChessBoard.board[self.xGrid, self.yGrid+direction] == None:
                 moves.append((self.xGrid, self.yGrid+direction))
+                
+            if self.yGrid == 1 and self.color == "white" or self.yGrid == 6 and self.color == "black":
+                #Move two spaces forward
+                if self.ChessBoard.board[self.xGrid, self.yGrid+2*direction] == None:
+                    moves.append((self.xGrid, self.yGrid+2*direction))
             
             #Capture Diagonally
             for dx in [-1, 1]:
@@ -274,7 +284,10 @@ class Pawn(ChessPiece):
         
         newMove = self.ChessBoard.board[move[0], move[1]]
         if( newMove != None):
-            self.ChessBoard.board[newMove[0]][newMove[1]] = None
+            self.ChessBoard.capture(newMove)
+            self.ChessBoard.board[move[0]][move[1]] = None
+          
+        self.ChessBoard.moveStack.pushMove(self, (self.xGrid, self.yGrid), move, newMove)
             
         self.ChessBoard.board[self.xGrid, self.yGrid] = None
         
@@ -287,16 +300,17 @@ class Pawn(ChessPiece):
         #Check if the pawn has reached the end of the board, if so then promote
         if self.yGrid == 7 and self.color == "white" or self.yGrid == 0 and self.color == "black":
     
-            self.ChessBoard.board.remove(self)
-            self.ChessBoard.board.add(Queen(self.color, self.xGrid, self.yGrid))
+            self.ChessBoard.board[self.xGrid, self.yGrid] = None
+            self.ChessBoard.board[self.xGrid, self.yGrid] = Queen(self.color, self.xGrid, self.yGrid, self.ChessBoard)
                 
         return True
         
 
 class Chessboard:
     def __init__(self):
+        self.moveStack = moveStack(self)
         self.board = np.empty((8, 8), dtype = ChessPiece)
-       
+        self.captured = []
         
     def SetUpBoard(self):
         for i in range(8):
@@ -304,8 +318,8 @@ class Chessboard:
             self.board[i, 6] = Pawn("black", i, 6, self)
             
         self.board[0, 0] = Rook("white", 0, 0, self)
-        self.board[0, 7] = Rook("white", 7, 0, self)
-        self.board[7, 0] = Rook("black", 0, 7, self)
+        self.board[7, 0] = Rook("white", 7, 0, self)
+        self.board[0, 7] = Rook("black", 0, 7, self)
         self.board[7, 7] = Rook("black", 7, 7, self)
         
         self.board[1, 0] = Knight("white", 1, 0, self)
@@ -339,7 +353,7 @@ class Chessboard:
     def render(self, screen):
         screen.fill((255, 255, 255))
         cell_size = 75
-        boardColor = [(255, 255, 255), (30, 0, 30)]
+        boardColor = [(255, 255, 255), (30, 0, 100)]
 
         for x, col in enumerate(self.board):
             for y, piece in enumerate(col):
@@ -351,8 +365,8 @@ class Chessboard:
                     sprite_link =  ChessPieceSprites.get(piece.ID) + "_" + piece.color + ".png"
                     if sprite_link:
                         sprite = pygame.image.load(sprite_link).convert_alpha()
-                        pos_x = x * 75 
-                        pos_y = y * 75
+                        pos_x = x * 75 + 5
+                        pos_y = y * 75 + 5
                         screen.blit(sprite, (pos_x, pos_y))
            
     def renderValidSquares(self, screen, moves):
@@ -361,6 +375,19 @@ class Chessboard:
             x, y = move
             rect = pygame.Rect(x * cell_size, y * cell_size, cell_size, cell_size)
             pygame.draw.rect(screen, (0, 255, 0), rect)
+    
+    def capture(self, piece):
+        self.captured.append(piece)
+        
+    def renderCapturedPieces(self, screen):
+        for i, piece in enumerate(self.captured):
+            sprite_link =  ChessPieceSprites.get(piece.ID) + "_" + piece.color + ".png"
+            if sprite_link:
+                sprite = pygame.image.load(sprite_link).convert_alpha()
+                pos_x = 800 + 5
+                pos_y = 75 * i + 5
+                screen.blit(sprite, (pos_x, pos_y))
+    
             
 class Game:
     def __init__(self, ai, screen, clock, font, color = "white"):
@@ -375,6 +402,7 @@ class Game:
         self.endGame = False
         self.clock = clock
         self.font = font
+        
         
     def StartGame(self):
         self.ChessBoard.SetUpBoard()
@@ -397,9 +425,16 @@ class Game:
     #Get player input and move accordingly 
     #if no valid move is found, prompt player to try again
     #add special moves such as castling, en passant, and pawn promotion
-    def PlayerMove(self, side): 
+    def PlayerMove(self, side, forcedCheck = False, possibleMoves = []): 
         
-        self.UserInput(side)
+        
+        pieceMoved = self.UserInput(side)
+        if forcedCheck:
+            current_player_king = self.ChessBoard.find(ChessPieceType.KING, side)
+            if self.inCheck(current_player_king, side):
+                print("Invalid Move")
+                pieceMoved.ChessBoard.moveStack.undoMove()
+                self.PlayerMove(side, forcedCheck, possibleMoves)
         
             
         
@@ -418,19 +453,22 @@ class Game:
                 self.endGame = True
             elif res == "Check":
                 
-                possibleMoves = self.ChessBoard.LegalMoves(side, True)
+                possibleMoves = self.LegalMoves(side, True)
                 forcedCheck = True
+                print("Check")
                 
             self.ChessBoard.render(self.screen) 
+            self.ChessBoard.renderCapturedPieces(self.screen)
+            
             side_text_surface = self.font.render("{}'s turn".format(side), True, (0, 0, 0))
             self.screen.blit(side_text_surface, (0, 0))
             
             pygame.display.flip()   
             
             if self.turn == 0:
-                self.PlayerMove(side)
+                self.PlayerMove(side, forcedCheck, possibleMoves)
             else:
-                self.PlayerMove(side)
+                self.PlayerMove(side, forcedCheck, possibleMoves)
                 
             self.turn = 1 - self.turn
             
@@ -459,8 +497,8 @@ class Game:
                     self.endGame = True
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     pos = pygame.mouse.get_pos()
-                    x = (pos[0] // 75) % 7
-                    y = (pos[1] // 75) % 7
+                    x = (pos[0] // 75) % 8
+                    y = (pos[1] // 75) % 8
                     rect = pygame.Rect(x * 75, y * 75, 75, 75)
                     pygame.draw.rect(self.screen, (255, 255, 0), rect)
                     
@@ -481,13 +519,14 @@ class Game:
                                     
                                     
                                     pos = pygame.mouse.get_pos()
-                                    lx = (pos[0] // 75) % 7
-                                    ly = (pos[1] // 75) % 7
+                                    lx = (pos[0] // 75) % 8
+                                    ly = (pos[1] // 75) % 8
                                     print(lx, ly)
                                     if self.ChessBoard.board[lx, ly] != None and self.ChessBoard.board[lx, ly].color == side:
                                         #If the user clicks on another piece of the same color, consider the new piece
                                         #as the selected piece
                                         self.ChessBoard.render(self.screen)
+                                        self.ChessBoard.renderCapturedPieces(self.screen)
                                         
                                         x = lx
                                         y = ly
@@ -502,7 +541,7 @@ class Game:
                                         break
                                     if (lx, ly) in valid_moves:
                                         self.ChessBoard.board[x, y].move((lx, ly))
-                                        return
+                                        return self.ChessBoard.board[lx, ly]
                                     else:
                                         print("Invalid Move")
                                         break
@@ -560,14 +599,63 @@ class Game:
                     
     def LegalMoves(self, side, check = False):
         #Generate all legal moves for the player
+            
         moves = []
         for row in self.ChessBoard.board:
             for piece in row:
                 if piece and piece.color == side:
-                    moves.extend(piece.validMove())
+                    for move in piece.validMove():
+                        moves.append((piece, move))
+                    
+        if check:
+            current_player_king = self.ChessBoard.find(ChessPieceType.KING, side)
+            checked_moves = []
+            for piece, move in moves:
+                piece.move(move)    
+                if not self.inCheck(current_player_king, side):
+                    checked_moves.append(move)
+                piece.ChessBoard.moveStack.undoMove()
+            return checked_moves
+                
         return moves
     
-   
+#History of moves made in the game
+class moveStack:
+    def __init__(self, ChessBoard):
+        self.stack = []
+        self.ChessBoard = ChessBoard
         
+    def canUndoMove(self):
+        return len(self.stack) > 0
         
+    def pushMove(self, piece, start_pos, end_pos, captured_piece = None):
+        self.stack.append((piece, start_pos, end_pos, captured_piece))
         
+    def getLastMove(self):
+        if len(self.stack) == 0:
+            return None
+        return self.stack[-1]
+    
+    
+    def undoMove(self):
+        if not self.canUndoMove():
+            print("No moves to undo")
+            return None
+        
+        piece, start_pos, end_pos, captured_piece = self.stack.pop()
+        self.ChessBoard.board[start_pos[0], start_pos[1]] = piece
+        piece.xGrid, piece.yGrid = start_pos
+        
+        if captured_piece:
+            self.ChessBoard.board[end_pos[0], end_pos[1]] = captured_piece
+        else:
+            self.ChessBoard.board[end_pos[0], end_pos[1]] = None
+            
+    
+    def clear(self):
+        self.stack = []
+        
+    def __str__(self):
+        return str(self.stack)
+    
+    
