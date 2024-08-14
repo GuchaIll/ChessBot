@@ -43,13 +43,13 @@ class ChessPiece:
         else:
             return False
     
-    def move(self, move):
+    def move(self, move, RecordCapture = True):
         if self.isValidMove(move) == False:
             return False
         
         newMove = self.ChessBoard.board[move[0], move[1]]
         if( newMove != None):
-            self.ChessBoard.capture(newMove)
+            self.ChessBoard.capture(newMove, RecordCapture)
             self.ChessBoard.board[move[0], move[1]] = None
             
         self.ChessBoard.moveStack.pushMove(self, (self.xGrid, self.yGrid), move, newMove)
@@ -81,10 +81,10 @@ class King(ChessPiece):
                         moves.append((self.xGrid + dx, self.yGrid + dy))
                         
         if(self.CanCastle("left")):
-            self.ChessBoard.board[0, self.yGrid].move((4, self.yGrid))
+            #self.ChessBoard.board[0, self.yGrid].move((4, self.yGrid))
             moves.append((0, self.yGrid))
         elif(self.CanCastle("right")):
-            self.ChessBoard.board[7, self.yGrid].move((4, self.yGrid))
+            #self.ChessBoard.board[7, self.yGrid].move((4, self.yGrid))
             moves.append((7, self.yGrid))
             
             
@@ -108,13 +108,13 @@ class King(ChessPiece):
     #The squares the king moves over during castling cannot be under attack.
     def CanCastle(self, direction):
         if(direction == "left"):
-            if(self.xGrid == 4 and self.yGrid == 0 and self.ChessBoard.board[0, self.yGrid].ID == ChessPieceType.ROOK and self.ChessBoard.board[1, self.yGrid] == None and self.ChessBoard.board[2, self.yGrid] == None and self.ChessBoard.board[3, self.yGrid] == None):
+            if(self.xGrid == 4 and self.yGrid == 0 and self.ChessBoard.board[0, self.yGrid] and self.ChessBoard.board[0, self.yGrid].ID == ChessPieceType.ROOK and self.ChessBoard.board[1, self.yGrid] == None and self.ChessBoard.board[2, self.yGrid] == None and self.ChessBoard.board[3, self.yGrid] == None):
                 for i  in range(5):
                     if(self.BeExposedToCheck((i, self.yGrid))):
                         return False
                 return True
         else:
-            if(self.xGrid == 4 and self.yGrid == 0 and self.ChessBoard.board[7, self.yGrid].ID == ChessPieceType.ROOK and self.ChessBoard.board[5, self.yGrid] == None and self.ChessBoard.board[6, self.yGrid] == None):
+            if(self.xGrid == 4 and self.yGrid == 0 and self.ChessBoard.board[7, self.yGrid] and self.ChessBoard.board[7, self.yGrid].ID == ChessPieceType.ROOK and self.ChessBoard.board[5, self.yGrid] == None and self.ChessBoard.board[6, self.yGrid] == None):
                 for i  in range(5, 8):
                     if(self.BeExposedToCheck((i, self.yGrid))):
                         return False
@@ -123,8 +123,15 @@ class King(ChessPiece):
     def isValidMove(self, move):
         super().isValidMove(move)
        
-    def move(self, move):
-        return super().move(move)
+    def move(self, move, castle, RecordCapture = True):
+        if castle:
+            if move[0] == 0:
+                #left castle
+                self.ChessBoard.board[0, self.yGrid].move((3, self.yGrid))
+            else:
+                #right castle
+                self.ChessBoard.board[7, self.yGrid].move((5, self.yGrid))
+        return super().move(move, RecordCapture)
     
         
 class Queen(ChessPiece):
@@ -146,6 +153,8 @@ class Queen(ChessPiece):
                     elif self.ChessBoard.board[x][y].color != self.color:
                         moves.append((x, y))
                         break
+                    elif self.ChessBoard.board[x][y].color == self.color:
+                        break
                     else:
                         break
                 else:
@@ -155,8 +164,8 @@ class Queen(ChessPiece):
     def isValidMove(self, move):
         return super().isValidMove(move)
        
-    def move(self, move):
-        return super().move(move)
+    def move(self, move, RecordCapture = True):
+        return super().move(move, RecordCapture)
     
 class Rook(ChessPiece):
     def __init__(self, color, xGrid, yGrid, board):
@@ -165,33 +174,30 @@ class Rook(ChessPiece):
         
     def validMove(self):
         moves = []
-        for dx in range(-7, 8):
-            if 0 <= self.xGrid + dx < 8:
-                if self.ChessBoard.board[self.xGrid + dx, self.yGrid] == None:
-                    moves.append((self.xGrid + dx, self.yGrid))
-                elif self.ChessBoard.board[self.xGrid + dx, self.yGrid].color != self.color:
-                    moves.append((self.xGrid + dx, self.yGrid))
-                    break
-                else:
-                    break
-        for dy in range(-7, 8):
-            if 0 <= self.yGrid + dy < 8:
-                if self.ChessBoard.board[self.xGrid, self.yGrid + dy] == None:
-                    moves.append((self.xGrid, self.yGrid + dy))
-                elif self.ChessBoard.board[self.xGrid, self.yGrid + dy].color != self.color:
-                    moves.append((self.xGrid, self.yGrid + dy))
-                    break
-                else:
-                    break
-        
+        for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+            for d in range(1, 8):
+                if 0 <= self.xGrid + dx * d < 8 and 0 <= self.yGrid + dy * d < 8:
+                    if self.ChessBoard.board[self.xGrid + dx*d, self.yGrid + dy*d] == None:
+                        #print("None", self.xGrid + dx, self.yGrid + dy)
+                        moves.append((self.xGrid + dx * d, self.yGrid+ dy * d))
+                    elif self.ChessBoard.board[self.xGrid + dx*d, self.yGrid + dy*d].color != self.color:
+                        #print("capture", self.color, self.ChessBoard.board[self.xGrid + dx, self.yGrid+dy].color, self.xGrid + dx, self.yGrid + dy)
+                        moves.append((self.xGrid + dx *d, self.yGrid + dy * d))
+                        break
+                    elif self.ChessBoard.board[self.xGrid + dx*d, self.yGrid + dy*d].color == self.color:
+                        #print("stop", self.color, self.ChessBoard.board[self.xGrid + dx, self.yGrid+ dy].color, self.xGrid + dx, self.yGrid + dy)
+                        break
+                    else:
+                        break
+ 
         return moves
           
     
     def isValidMove(self, move):
         super().isValidMove(move)
        
-    def move(self, move):
-        super().move(move)
+    def move(self, move, RecordCapture = True):
+        super().move(move, RecordCapture)
     
 class Knight(ChessPiece):
     def __init__(self, color, xGrid, yGrid, board):
@@ -210,8 +216,8 @@ class Knight(ChessPiece):
     def isValidMove(self, move):
         super().isValidMove(move)
        
-    def move(self, move):
-        super().move(move)
+    def move(self, move, RecordCapture = True):
+        super().move(move, RecordCapture)
     
 class Bishop(ChessPiece):
     def __init__(self, color, xGrid, yGrid, board):
@@ -232,6 +238,8 @@ class Bishop(ChessPiece):
                        elif self.ChessBoard.board[newX, newY].color != self.color:
                            moves.append((newX, newY))
                            break
+                       elif self.ChessBoard.board[newX, newY].color == self.color:
+                            break
                        else:
                            break
         
@@ -242,8 +250,8 @@ class Bishop(ChessPiece):
     def isValidMove(self, move):
         super().isValidMove(move)
        
-    def move(self, move):
-        super().move(move)
+    def move(self, move, RecordCapture = True):
+        super().move(move, RecordCapture)
         
 class Pawn(ChessPiece):
     def __init__(self, color, xGrid, yGrid, board):
@@ -285,17 +293,17 @@ class Pawn(ChessPiece):
     def isValidMove(self, move):
         super().isValidMove(move)
        
-    def move(self, move):
+    def move(self, move, RecordCapture = True):
         if self.isValidMove(move) == False:
             return False
         
         newMove = self.ChessBoard.board[move[0], move[1]]
         if( newMove != None):
-            self.ChessBoard.capture(newMove)
+            self.ChessBoard.capture(newMove, RecordCapture)
             self.ChessBoard.board[move[0]][move[1]] = None
         elif move[0] != self.xGrid:
             #En passant
-            self.ChessBoard.capture(self.ChessBoard.board[move[0], self.yGrid])
+            self.ChessBoard.capture(self.ChessBoard.board[move[0], self.yGrid], RecordCapture)
             self.ChessBoard.board[move[0], self.yGrid] = None
               
         if abs(move[1] - self.yGrid) == 2:
@@ -394,8 +402,9 @@ class Chessboard:
             rect = pygame.Rect(x * cell_size, y * cell_size, cell_size, cell_size)
             pygame.draw.rect(screen, (0, 255, 0), rect)
     
-    def capture(self, piece):
-        self.captured.append(piece)
+    def capture(self, piece, RecordCapture = True):
+        if(RecordCapture):
+            self.captured.append(piece)
         
     def renderCapturedPieces(self, screen):
         bIndex = 0
@@ -415,11 +424,11 @@ class Chessboard:
                     bIndex += 1
                 screen.blit(sprite, (pos_x, pos_y))
                 
-    def makeMove(self, piece, newLoc):
-        piece.move(newLoc)
+    def makeMove(self, piece, newLoc, updateCapture = True):
+        piece.move(newLoc, updateCapture)
         
-    def undoMove(self):
-        self.moveStack.undoMove()
+    def undoMove(self, updateCapture = True):
+        self.moveStack.undoMove(updateCapture)
         
     def evaluate(self):
         return self.Evaluator.evaluate(self.board)
@@ -687,7 +696,7 @@ class moveStack:
         return self.stack[-1]
     
     
-    def undoMove(self):
+    def undoMove(self, RecordCapture = True):
         if not self.canUndoMove():
             print("No moves to undo")
             return None
@@ -698,10 +707,11 @@ class moveStack:
         
         if captured_piece:
             self.ChessBoard.board[end_pos[0], end_pos[1]] = captured_piece
-            for i, all_captured_pieces in enumerate(self.ChessBoard.captured):
-                if captured_piece.ID == all_captured_pieces.ID:
-                    self.ChessBoard.captured.pop(i)
-                    break
+            if RecordCapture:
+                for i, all_captured_pieces in enumerate(self.ChessBoard.captured):
+                    if captured_piece.ID == all_captured_pieces.ID and captured_piece.color == all_captured_pieces.color:
+                        self.ChessBoard.captured.pop(i)
+                        break
         else:
             self.ChessBoard.board[end_pos[0], end_pos[1]] = None
             
