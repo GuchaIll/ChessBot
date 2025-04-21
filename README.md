@@ -32,6 +32,10 @@ ChessBot allows players to enjoy a game of chess with an AI opponent. The projec
      ```bash
     pip install -r requirements.txt
 
+### Usage
+To start the game, run the following command:
+python [main.py](http://_vscodecontentref_/1)
+
 ### Features
 Play chess against an AI opponent.
 Interactive graphical interface using pygame.
