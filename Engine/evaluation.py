@@ -101,13 +101,19 @@ class Evaluator():
         pass
     def evaluate(self, board):
         current_score = 0
+        material_balance = 0
+        positional_score = 0
+        
         for i, col in enumerate(board):
             for j, piece in enumerate(col):
                 if piece != None:
                     mult = 1 if piece.color == "white" else -1
                     pieceValue = int(PieceValue[piece.ID.name])
                     positionValue = piece_square_tables[piece.ID.name][i][j] 
-                    current_score += mult * (pieceValue + mult * positionValue)
                     
-       
+                    material_balance += mult * pieceValue
+                    positional_score += mult * positionValue
+                    
+        # Weight material more heavily than position
+        current_score = material_balance + (positional_score * 0.5)
         return current_score

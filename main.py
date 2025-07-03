@@ -1,6 +1,6 @@
 import pygame
-from chess import *
-from defaultAI import *
+from Engine.chess import *
+from Engine.AI.defaultAI import *
 
 
 # pygame setup
